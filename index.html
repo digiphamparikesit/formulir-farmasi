@@ -211,11 +211,9 @@
     <div class="card">
       <p class="section-label">Identitas staff</p>
       <div class="field">
-        <label for="nip">NIP</label>
-        <div class="nip-row">
-          <input type="text" id="nip" name="nip" placeholder="Masukkan NIP" required>
-          <button type="button" class="btn-check" id="checkNip">Cari data</button>
-        </div>
+        <label for="staffSearch">Cari nama staff</label>
+        <input type="text" id="staffSearch" list="staffOptions" placeholder="Ketik beberapa huruf nama..." autocomplete="off" required>
+        <datalist id="staffOptions"></datalist>
         <div class="staff-preview" id="staffPreview"></div>
       </div>
     </div>
@@ -264,7 +262,7 @@
 <script>
 // ==== KONFIGURASI ====
 // Ganti dengan URL Web App Google Apps Script yang sudah di-deploy
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxFoa5--tqPOorgaXOz-TO27_SZR-wXndNR9oPDgc1NLjoVwKOQGBw4MmRM4sYmZ95Gpw/exec";
+const APPS_SCRIPT_URL = "GANTI_DENGAN_URL_WEB_APP_ANDA";
 
 // ==== DEFINISI FIELD PER JENIS FORMULIR ====
 const formConfigs = {
@@ -298,7 +296,7 @@ const formConfigs = {
       { id: "tanggalGantiShift", label: "Tanggal ganti shift", type: "date", required: true },
       { id: "shiftLama", label: "Shift lama (milik saya)", type: "select", required: true, options: ["P","TS","S","M"] },
       { id: "shiftBaru", label: "Shift baru (milik saya)", type: "select", required: true, options: ["P","TS","S","M"] },
-      { id: "nipRekan", label: "NIP staff pengganti", type: "nip-lookup", required: true },
+      { id: "nipRekan", label: "Nama staff pengganti", type: "name-lookup", required: true },
       { id: "shiftLamaP", label: "Shift lama (milik pengganti)", type: "select", required: true, options: ["P","TS","S","M"] },
       { id: "shiftBaruP", label: "Shift baru (milik pengganti)", type: "select", required: true, options: ["P","TS","S","M"] }
     ]
@@ -364,13 +362,10 @@ function renderDynamicFields(jenis){
               ${o[1]}
             </label>`).join("")}
         </div>`;
-    } else if (f.type === "nip-lookup"){
+    } else if (f.type === "name-lookup"){
       wrap.innerHTML = `
         <label for="${f.id}">${f.label}</label>
-        <div class="nip-row">
-          <input type="text" id="${f.id}" name="${f.id}" placeholder="NIP rekan" required>
-          <button type="button" class="btn-check" data-lookup="${f.id}">Cari data</button>
-        </div>
+        <input type="text" id="${f.id}" name="${f.id}" list="staffOptions" placeholder="Ketik beberapa huruf nama..." autocomplete="off" required>
         <div class="staff-preview" id="${f.id}Preview"></div>`;
     } else if (f.type === "select"){
       wrap.innerHTML = `
@@ -387,55 +382,67 @@ function renderDynamicFields(jenis){
     container.appendChild(wrap);
   });
 
-  container.querySelectorAll("[data-lookup]").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const fieldId = btn.dataset.lookup;
-      const nip = document.getElementById(fieldId).value.trim();
-      lookupStaff(nip, document.getElementById(fieldId + "Preview"), false, fieldId);
+  container.querySelectorAll('input[list="staffOptions"]').forEach(input => {
+    input.addEventListener("input", () => {
+      const found = findStaffFromInputValue(input.value);
+      const previewEl = document.getElementById(input.id + "Preview");
+      if (found){
+        nipLookupCache[input.id] = found;
+        previewEl.innerHTML = `
+          <div><strong>${found.nama}</strong></div>
+          <div>${found.departemen || "-"} &middot; ${found.jabatan || "-"}</div>`;
+        previewEl.className = "staff-preview show";
+      } else {
+        delete nipLookupCache[input.id];
+        previewEl.className = "staff-preview";
+      }
     });
   });
 }
 
-// ==== AUTOFILL DATA STAFF ====
-document.getElementById("checkNip").addEventListener("click", () => {
-  const nip = document.getElementById("nip").value.trim();
-  lookupStaff(nip, document.getElementById("staffPreview"), true);
-});
+// ==== MUAT DAFTAR STAFF (sekali saat halaman dibuka) ====
+let staffList = [];
 
-async function lookupStaff(nip, previewEl, isMainStaff, cacheKey){
-  if (!nip){
-    showPreview(previewEl, "Masukkan NIP terlebih dahulu.", true);
-    return;
-  }
-  showPreview(previewEl, "Mencari data...", false);
-
+async function loadStaffList(){
   try {
-    const res = await fetch(`${APPS_SCRIPT_URL}?action=getStaff&nip=${encodeURIComponent(nip)}`);
+    const res = await fetch(`${APPS_SCRIPT_URL}?action=listStaff`);
     const data = await res.json();
+    staffList = Array.isArray(data) ? data : [];
 
-    if (data.error || !data.nama){
-      showPreview(previewEl, "NIP tidak ditemukan. Periksa kembali.", true);
-      if (isMainStaff) staffData = null;
-      if (cacheKey) delete nipLookupCache[cacheKey];
-      return;
-    }
-
-    previewEl.innerHTML = `
-      <div><strong>${data.nama}</strong></div>
-      <div>${data.departemen || "-"} &middot; ${data.jabatan || "-"}</div>`;
-    previewEl.className = "staff-preview show";
-
-    if (isMainStaff) staffData = data;
-    if (cacheKey) nipLookupCache[cacheKey] = data;
+    const datalist = document.getElementById("staffOptions");
+    datalist.innerHTML = staffList
+      .map(s => `<option value="${s.nama} (${s.nip})">`)
+      .join("");
   } catch (err){
-    showPreview(previewEl, "Gagal menghubungi server. Coba lagi.", true);
+    console.error("Gagal memuat daftar staff:", err);
   }
 }
+document.addEventListener("DOMContentLoaded", loadStaffList);
 
-function showPreview(el, text, isError){
-  el.textContent = text;
-  el.className = "staff-preview show" + (isError ? " error" : "");
+// Cocokkan teks input (format "Nama (NIP)") dengan data staff yang sudah dimuat
+function findStaffFromInputValue(value){
+  const match = value.match(/\(([^)]+)\)\s*$/);
+  const nip = match ? match[1].trim() : null;
+  if (!nip) return null;
+  return staffList.find(s => s.nip === nip) || null;
 }
+
+// ==== AUTOFILL IDENTITAS UTAMA ====
+document.getElementById("staffSearch").addEventListener("input", () => {
+  const previewEl = document.getElementById("staffPreview");
+  const found = findStaffFromInputValue(document.getElementById("staffSearch").value);
+
+  if (found){
+    staffData = found;
+    previewEl.innerHTML = `
+      <div><strong>${found.nama}</strong></div>
+      <div>${found.departemen || "-"} &middot; ${found.jabatan || "-"}</div>`;
+    previewEl.className = "staff-preview show";
+  } else {
+    staffData = null;
+    previewEl.className = "staff-preview";
+  }
+});
 
 // ==== SUBMIT FORM ====
 document.getElementById("mainForm").addEventListener("submit", async (e) => {
@@ -449,7 +456,7 @@ document.getElementById("mainForm").addEventListener("submit", async (e) => {
     return;
   }
   if (!staffData){
-    banner.textContent = "Data staff belum ditemukan. Cari data NIP terlebih dahulu.";
+    banner.textContent = "Data staff belum ditemukan. Cari dan pilih nama terlebih dahulu.";
     banner.classList.add("banner","error","show");
     return;
   }
@@ -460,7 +467,7 @@ document.getElementById("mainForm").addEventListener("submit", async (e) => {
   if (currentJenis === "tukarshift"){
     const rekan = nipLookupCache["nipRekan"];
     if (!rekan){
-      banner.textContent = "Cari data NIP staff pengganti terlebih dahulu.";
+      banner.textContent = "Cari dan pilih nama staff pengganti terlebih dahulu.";
       banner.classList.add("banner","error","show");
       return;
     }
@@ -485,7 +492,7 @@ document.getElementById("mainForm").addEventListener("submit", async (e) => {
       }
     };
   } else {
-    payload = { jenis: currentJenis };
+    payload = { jenis: currentJenis, nip: staffData.nip };
     formData.forEach((value, key) => { payload[key] = value; });
   }
 
