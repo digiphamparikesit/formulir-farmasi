@@ -284,15 +284,23 @@ const formConfigs = {
       { id: "keterangan", label: "Keterangan (opsional lampiran surat dokter)", type: "textarea", required: false }
     ]
   },
+  // Jenis ini pakai sistem "Tukar Shift Petugas" yang sudah ada (sheet "Tukar Shift"),
+  // bukan sheet TukarShift baru. Karena itu strukturnya ikut header sheet lama.
   tukarshift: {
     label: "Detail tukar shift",
+    isLegacy: true,
     fields: [
-      { id: "tanggalShiftAsal", label: "Tanggal shift asal", type: "date", required: true },
-      { id: "jamShiftAsal", label: "Jam shift asal", type: "time", required: true },
-      { id: "nipRekan", label: "NIP rekan pengganti", type: "nip-lookup", required: true },
-      { id: "tanggalShiftPengganti", label: "Tanggal shift pengganti", type: "date", required: true },
-      { id: "jamShiftPengganti", label: "Jam shift pengganti", type: "time", required: true },
-      { id: "keterangan", label: "Keterangan", type: "textarea", required: false }
+      { id: "tahun", label: "Tahun", type: "text", required: true, placeholder: "contoh: 2026" },
+      { id: "bulan", label: "Bulan", type: "select", required: true,
+        options: ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"] },
+      { id: "depo", label: "Depo", type: "select", required: true,
+        options: ["GD.FARMASI","RANAP","FARM TERPADU","IGD","IBS","UPSS","CENDERAWASIH"] },
+      { id: "tanggalGantiShift", label: "Tanggal ganti shift", type: "date", required: true },
+      { id: "shiftLama", label: "Shift lama (milik saya)", type: "select", required: true, options: ["P","TS","S","M"] },
+      { id: "shiftBaru", label: "Shift baru (milik saya)", type: "select", required: true, options: ["P","TS","S","M"] },
+      { id: "nipRekan", label: "NIP staff pengganti", type: "nip-lookup", required: true },
+      { id: "shiftLamaP", label: "Shift lama (milik pengganti)", type: "select", required: true, options: ["P","TS","S","M"] },
+      { id: "shiftBaruP", label: "Shift baru (milik pengganti)", type: "select", required: true, options: ["P","TS","S","M"] }
     ]
   },
   cuti: {
@@ -316,6 +324,7 @@ const formConfigs = {
 
 let currentJenis = null;
 let staffData = null;
+let nipLookupCache = {}; // simpan hasil lookup NIP selain NIP utama, contoh: { nipRekan: {nip, nama, ...} }
 
 // ==== PILIH JENIS FORMULIR ====
 document.querySelectorAll(".chip").forEach(chip => {
@@ -323,6 +332,7 @@ document.querySelectorAll(".chip").forEach(chip => {
     document.querySelectorAll(".chip").forEach(c => c.classList.remove("active"));
     chip.classList.add("active");
     currentJenis = chip.dataset.jenis;
+    nipLookupCache = {};
     renderDynamicFields(currentJenis);
   });
 });
@@ -362,6 +372,13 @@ function renderDynamicFields(jenis){
           <button type="button" class="btn-check" data-lookup="${f.id}">Cari data</button>
         </div>
         <div class="staff-preview" id="${f.id}Preview"></div>`;
+    } else if (f.type === "select"){
+      wrap.innerHTML = `
+        <label for="${f.id}">${f.label}${f.required ? "" : ' <span class="opt">(opsional)</span>'}</label>
+        <select id="${f.id}" name="${f.id}" ${f.required ? "required" : ""}>
+          <option value="" disabled selected>Pilih ${f.label.toLowerCase()}</option>
+          ${f.options.map(o => `<option value="${o}">${o}</option>`).join("")}
+        </select>`;
     } else {
       wrap.innerHTML = `
         <label for="${f.id}">${f.label}${f.required ? "" : ' <span class="opt">(opsional)</span>'}</label>
@@ -374,7 +391,7 @@ function renderDynamicFields(jenis){
     btn.addEventListener("click", () => {
       const fieldId = btn.dataset.lookup;
       const nip = document.getElementById(fieldId).value.trim();
-      lookupStaff(nip, document.getElementById(fieldId + "Preview"));
+      lookupStaff(nip, document.getElementById(fieldId + "Preview"), false, fieldId);
     });
   });
 }
@@ -385,7 +402,7 @@ document.getElementById("checkNip").addEventListener("click", () => {
   lookupStaff(nip, document.getElementById("staffPreview"), true);
 });
 
-async function lookupStaff(nip, previewEl, isMainStaff){
+async function lookupStaff(nip, previewEl, isMainStaff, cacheKey){
   if (!nip){
     showPreview(previewEl, "Masukkan NIP terlebih dahulu.", true);
     return;
@@ -399,6 +416,7 @@ async function lookupStaff(nip, previewEl, isMainStaff){
     if (data.error || !data.nama){
       showPreview(previewEl, "NIP tidak ditemukan. Periksa kembali.", true);
       if (isMainStaff) staffData = null;
+      if (cacheKey) delete nipLookupCache[cacheKey];
       return;
     }
 
@@ -408,6 +426,7 @@ async function lookupStaff(nip, previewEl, isMainStaff){
     previewEl.className = "staff-preview show";
 
     if (isMainStaff) staffData = data;
+    if (cacheKey) nipLookupCache[cacheKey] = data;
   } catch (err){
     showPreview(previewEl, "Gagal menghubungi server. Coba lagi.", true);
   }
@@ -436,8 +455,39 @@ document.getElementById("mainForm").addEventListener("submit", async (e) => {
   }
 
   const formData = new FormData(e.target);
-  const payload = { jenis: currentJenis };
-  formData.forEach((value, key) => { payload[key] = value; });
+  let payload;
+
+  if (currentJenis === "tukarshift"){
+    const rekan = nipLookupCache["nipRekan"];
+    if (!rekan){
+      banner.textContent = "Cari data NIP staff pengganti terlebih dahulu.";
+      banner.classList.add("banner","error","show");
+      return;
+    }
+    // Payload ini sengaja TANPA field "jenis" — router Code.gs akan
+    // mengarahkannya ke sistem Tukar Shift Petugas yang sudah ada (sheet "Tukar Shift").
+    payload = {
+      action: "add",
+      record: {
+        "Submission ID": "TS-" + Date.now(),
+        "Respondent ID": staffData.nip,
+        "Submitted at": new Date().toISOString(),
+        "Tahun": formData.get("tahun") || "",
+        "Bulan": formData.get("bulan") || "",
+        "Depo": formData.get("depo") || "",
+        "Tanggal ganti shift": formData.get("tanggalGantiShift") || "",
+        "Nama staff yang tukar shiff": staffData.nama,
+        "Shift Lama": formData.get("shiftLama") || "",
+        "Shift Baru": formData.get("shiftBaru") || "",
+        "Nama Staff pengganti": rekan.nama,
+        "Shiff lama (P)": formData.get("shiftLamaP") || "",
+        "Shiff baru(P)": formData.get("shiftBaruP") || ""
+      }
+    };
+  } else {
+    payload = { jenis: currentJenis };
+    formData.forEach((value, key) => { payload[key] = value; });
+  }
 
   const submitBtn = document.getElementById("submitBtn");
   submitBtn.disabled = true;
@@ -458,6 +508,7 @@ document.getElementById("mainForm").addEventListener("submit", async (e) => {
     document.getElementById("staffPreview").className = "staff-preview";
     currentJenis = null;
     staffData = null;
+    nipLookupCache = {};
   } catch (err){
     banner.textContent = "Gagal mengirim pengajuan. Periksa koneksi dan coba lagi.";
     banner.classList.add("banner","error","show");
