@@ -33,7 +33,8 @@
     line-height:1.5;
     padding:40px 16px 80px;
   }
-  .wrap{max-width:640px;margin:0 auto;}
+  .wrap{max-width:640px;margin:0 auto;transition:max-width .2s;}
+  .wrap.wide{max-width:960px;}
   .brand{
     display:flex;
     align-items:center;
@@ -186,6 +187,30 @@
   .banner.success{background:var(--green-100);color:var(--green-900);border:1px solid var(--green-500);}
   .banner.error{background:var(--danger-bg);color:var(--danger);border:1px solid #F3C7C4;}
   .empty-hint{font-size:13px;color:var(--muted);padding:8px 0;}
+
+  .col-group{
+    display:grid;
+    grid-template-columns:repeat(3, 1fr);
+    gap:24px;
+  }
+  .col-group .col-title{
+    font-size:11px;
+    font-weight:600;
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    color:var(--muted);
+    margin:0 0 12px;
+    padding-bottom:8px;
+    border-bottom:1px solid var(--border);
+  }
+  @media (max-width:720px){
+    .col-group{grid-template-columns:1fr;}
+    .col-group > div:not(:last-child){
+      padding-bottom:16px;
+      margin-bottom:16px;
+      border-bottom:1px dashed var(--border);
+    }
+  }
   @media (max-width:480px){
     .row2{grid-template-columns:1fr;}
   }
@@ -262,7 +287,7 @@
 <script>
 // ==== KONFIGURASI ====
 // Ganti dengan URL Web App Google Apps Script yang sudah di-deploy
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxFoa5--tqPOorgaXOz-TO27_SZR-wXndNR9oPDgc1NLjoVwKOQGBw4MmRM4sYmZ95Gpw/exec";
+const APPS_SCRIPT_URL = "GANTI_DENGAN_URL_WEB_APP_ANDA";
 
 // ==== DEFINISI FIELD PER JENIS FORMULIR ====
 const formConfigs = {
@@ -282,23 +307,38 @@ const formConfigs = {
       { id: "keterangan", label: "Keterangan (opsional lampiran surat dokter)", type: "textarea", required: false }
     ]
   },
-  // Jenis ini pakai sistem "Tukar Shift Petugas" yang sudah ada (sheet "Tukar Shift"),
-  // bukan sheet TukarShift baru. Karena itu strukturnya ikut header sheet lama.
+  // Jenis ini pakai sistem "Tukar Shift Petugas" yang sudah ada (sheet "TukarShift"),
+  // ditampilkan dalam 3 kolom (kiri/tengah/kanan) supaya muat 1 layar di komputer.
   tukarshift: {
     label: "Detail tukar shift",
     isLegacy: true,
-    fields: [
-      { id: "tahun", label: "Tahun", type: "text", required: true, placeholder: "contoh: 2026" },
-      { id: "bulan", label: "Bulan", type: "select", required: true,
-        options: ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"] },
-      { id: "depo", label: "Depo", type: "select", required: true,
-        options: ["GD.FARMASI","RANAP","FARM TERPADU","IGD","IBS","UPSS","CENDERAWASIH"] },
-      { id: "tanggalGantiShift", label: "Tanggal ganti shift", type: "date", required: true },
-      { id: "shiftLama", label: "Shift lama (milik saya)", type: "select", required: true, options: ["P","TS","S","M"] },
-      { id: "shiftBaru", label: "Shift baru (milik saya)", type: "select", required: true, options: ["P","TS","S","M"] },
-      { id: "nipRekan", label: "Nama staff pengganti", type: "name-lookup", required: true },
-      { id: "shiftLamaP", label: "Shift lama (milik pengganti)", type: "select", required: true, options: ["P","TS","S","M"] },
-      { id: "shiftBaruP", label: "Shift baru (milik pengganti)", type: "select", required: true, options: ["P","TS","S","M"] }
+    columns: [
+      {
+        title: "Informasi umum",
+        fields: [
+          { id: "tahun", label: "Tahun", type: "text", required: true, placeholder: "contoh: 2026" },
+          { id: "bulan", label: "Bulan", type: "select", required: true,
+            options: ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"] },
+          { id: "depo", label: "Depo", type: "select", required: true,
+            options: ["GD.FARMASI","RANAP","FARM TERPADU","IGD","IBS","UPSS","CENDERAWASIH"] },
+          { id: "tanggalGantiShift", label: "Tanggal ganti shift", type: "date", required: true }
+        ]
+      },
+      {
+        title: "Shift saya",
+        fields: [
+          { id: "shiftLama", label: "Shift lama", type: "select", required: true, options: ["P","TS","S","M"] },
+          { id: "shiftBaru", label: "Shift baru", type: "select", required: true, options: ["P","TS","S","M"] }
+        ]
+      },
+      {
+        title: "Shift pengganti",
+        fields: [
+          { id: "nipRekan", label: "Nama staff pengganti", type: "name-lookup", required: true },
+          { id: "shiftLamaP", label: "Shift lama pengganti", type: "select", required: true, options: ["P","TS","S","M"] },
+          { id: "shiftBaruP", label: "Shift baru pengganti", type: "select", required: true, options: ["P","TS","S","M"] }
+        ]
+      }
     ]
   },
   cuti: {
@@ -331,9 +371,48 @@ document.querySelectorAll(".chip").forEach(chip => {
     chip.classList.add("active");
     currentJenis = chip.dataset.jenis;
     nipLookupCache = {};
+    document.querySelector(".wrap").classList.toggle("wide", currentJenis === "tukarshift");
     renderDynamicFields(currentJenis);
   });
 });
+
+function buildFieldWrap(f){
+  const wrap = document.createElement("div");
+  wrap.className = "field";
+
+  if (f.type === "textarea"){
+    wrap.innerHTML = `
+      <label for="${f.id}">${f.label}${f.required ? "" : ' <span class="opt">(opsional)</span>'}</label>
+      <textarea id="${f.id}" name="${f.id}" ${f.required ? "required" : ""}></textarea>`;
+  } else if (f.type === "radio"){
+    wrap.innerHTML = `
+      <label>${f.label}</label>
+      <div class="radio-group">
+        ${f.options.map((o,i) => `
+          <label class="radio-opt">
+            <input type="radio" name="${f.id}" value="${o[0]}" ${i===0 ? "checked" : ""}>
+            ${o[1]}
+          </label>`).join("")}
+      </div>`;
+  } else if (f.type === "name-lookup"){
+    wrap.innerHTML = `
+      <label for="${f.id}">${f.label}</label>
+      <input type="text" id="${f.id}" name="${f.id}" list="staffOptions" placeholder="Ketik beberapa huruf nama..." autocomplete="off" required>
+      <div class="staff-preview" id="${f.id}Preview"></div>`;
+  } else if (f.type === "select"){
+    wrap.innerHTML = `
+      <label for="${f.id}">${f.label}${f.required ? "" : ' <span class="opt">(opsional)</span>'}</label>
+      <select id="${f.id}" name="${f.id}" ${f.required ? "required" : ""}>
+        <option value="" disabled selected>Pilih ${f.label.toLowerCase()}</option>
+        ${f.options.map(o => `<option value="${o}">${o}</option>`).join("")}
+      </select>`;
+  } else {
+    wrap.innerHTML = `
+      <label for="${f.id}">${f.label}${f.required ? "" : ' <span class="opt">(opsional)</span>'}</label>
+      <input type="${f.type}" id="${f.id}" name="${f.id}" ${f.required ? "required" : ""}>`;
+  }
+  return wrap;
+}
 
 function renderDynamicFields(jenis){
   const config = formConfigs[jenis];
@@ -344,43 +423,23 @@ function renderDynamicFields(jenis){
   card.style.display = "block";
   container.innerHTML = "";
 
-  config.fields.forEach(f => {
-    const wrap = document.createElement("div");
-    wrap.className = "field";
+  if (config.columns){
+    // Layout 3 kolom (kiri/tengah/kanan) — dipakai untuk tukar shift
+    const colGroup = document.createElement("div");
+    colGroup.className = "col-group";
 
-    if (f.type === "textarea"){
-      wrap.innerHTML = `
-        <label for="${f.id}">${f.label}${f.required ? "" : ' <span class="opt">(opsional)</span>'}</label>
-        <textarea id="${f.id}" name="${f.id}" ${f.required ? "required" : ""}></textarea>`;
-    } else if (f.type === "radio"){
-      wrap.innerHTML = `
-        <label>${f.label}</label>
-        <div class="radio-group">
-          ${f.options.map((o,i) => `
-            <label class="radio-opt">
-              <input type="radio" name="${f.id}" value="${o[0]}" ${i===0 ? "checked" : ""}>
-              ${o[1]}
-            </label>`).join("")}
-        </div>`;
-    } else if (f.type === "name-lookup"){
-      wrap.innerHTML = `
-        <label for="${f.id}">${f.label}</label>
-        <input type="text" id="${f.id}" name="${f.id}" list="staffOptions" placeholder="Ketik beberapa huruf nama..." autocomplete="off" required>
-        <div class="staff-preview" id="${f.id}Preview"></div>`;
-    } else if (f.type === "select"){
-      wrap.innerHTML = `
-        <label for="${f.id}">${f.label}${f.required ? "" : ' <span class="opt">(opsional)</span>'}</label>
-        <select id="${f.id}" name="${f.id}" ${f.required ? "required" : ""}>
-          <option value="" disabled selected>Pilih ${f.label.toLowerCase()}</option>
-          ${f.options.map(o => `<option value="${o}">${o}</option>`).join("")}
-        </select>`;
-    } else {
-      wrap.innerHTML = `
-        <label for="${f.id}">${f.label}${f.required ? "" : ' <span class="opt">(opsional)</span>'}</label>
-        <input type="${f.type}" id="${f.id}" name="${f.id}" ${f.required ? "required" : ""}>`;
-    }
-    container.appendChild(wrap);
-  });
+    config.columns.forEach(col => {
+      const colEl = document.createElement("div");
+      colEl.innerHTML = `<p class="col-title">${col.title}</p>`;
+      col.fields.forEach(f => colEl.appendChild(buildFieldWrap(f)));
+      colGroup.appendChild(colEl);
+    });
+
+    container.appendChild(colGroup);
+  } else {
+    // Layout satu kolom biasa — izin/sakit/cuti/telat
+    config.fields.forEach(f => container.appendChild(buildFieldWrap(f)));
+  }
 
   container.querySelectorAll('input[list="staffOptions"]').forEach(input => {
     input.addEventListener("input", () => {
@@ -512,6 +571,7 @@ document.getElementById("mainForm").addEventListener("submit", async (e) => {
     e.target.reset();
     document.querySelectorAll(".chip").forEach(c => c.classList.remove("active"));
     document.getElementById("dynamicCard").style.display = "none";
+    document.querySelector(".wrap").classList.remove("wide");
     document.getElementById("staffPreview").className = "staff-preview";
     currentJenis = null;
     staffData = null;
