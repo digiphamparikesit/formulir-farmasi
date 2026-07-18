@@ -157,6 +157,46 @@
     color:#fff;
   }
   .chip.active svg{stroke:#fff;}
+
+  /* ==== WARNA PER JENIS FORMULIR ==== */
+  .chip[data-jenis="izin"]{background:#EAF1FE;border-color:#CBDCFB;}
+  .chip[data-jenis="izin"] svg{stroke:#2F6FED;}
+  .chip[data-jenis="izin"].active{background:#2F6FED;border-color:#2F6FED;}
+
+  .chip[data-jenis="sakit"]{background:#FCE7F3;border-color:#F6C6E0;}
+  .chip[data-jenis="sakit"] svg{stroke:#DB2777;}
+  .chip[data-jenis="sakit"].active{background:#DB2777;border-color:#DB2777;}
+
+  .chip[data-jenis="tukarshift"]{background:#EDE9FE;border-color:#D6CCFB;}
+  .chip[data-jenis="tukarshift"] svg{stroke:#7C3AED;}
+  .chip[data-jenis="tukarshift"].active{background:#7C3AED;border-color:#7C3AED;}
+
+  .chip[data-jenis="cuti"]{background:#FEF3C7;border-color:#FBE39A;}
+  .chip[data-jenis="cuti"] svg{stroke:#D97706;}
+  .chip[data-jenis="cuti"].active{background:#D97706;border-color:#D97706;}
+
+  .chip[data-jenis="telat"]{background:#CFFAFE;border-color:#A5F0F7;}
+  .chip[data-jenis="telat"] svg{stroke:#0891B2;}
+  .chip[data-jenis="telat"].active{background:#0891B2;border-color:#0891B2;}
+
+  .chip[data-jenis="absensieror"]{background:#FEE2E2;border-color:#FBC7C4;}
+  .chip[data-jenis="absensieror"] svg{stroke:#DC2626;}
+  .chip[data-jenis="absensieror"].active{background:#DC2626;border-color:#DC2626;}
+
+  /* Aksen warna pada kartu detail, mengikuti jenis formulir yang aktif */
+  #dynamicCard{border-left-width:4px;transition:border-color .15s, background .15s;}
+  #dynamicCard[data-jenis="izin"]{border-left-color:#2F6FED;background:#F8FAFF;}
+  #dynamicCard[data-jenis="izin"] #dynamicLabel{color:#2F6FED;}
+  #dynamicCard[data-jenis="sakit"]{border-left-color:#DB2777;background:#FEF8FB;}
+  #dynamicCard[data-jenis="sakit"] #dynamicLabel{color:#DB2777;}
+  #dynamicCard[data-jenis="tukarshift"]{border-left-color:#7C3AED;background:#FBFAFF;}
+  #dynamicCard[data-jenis="tukarshift"] #dynamicLabel{color:#7C3AED;}
+  #dynamicCard[data-jenis="cuti"]{border-left-color:#D97706;background:#FFFCF5;}
+  #dynamicCard[data-jenis="cuti"] #dynamicLabel{color:#D97706;}
+  #dynamicCard[data-jenis="telat"]{border-left-color:#0891B2;background:#F5FDFE;}
+  #dynamicCard[data-jenis="telat"] #dynamicLabel{color:#0891B2;}
+  #dynamicCard[data-jenis="absensieror"]{border-left-color:#DC2626;background:#FFFAFA;}
+  #dynamicCard[data-jenis="absensieror"] #dynamicLabel{color:#DC2626;}
   .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
   .radio-group{display:flex;gap:16px;padding-top:2px;}
   .radio-opt{display:flex;align-items:center;gap:6px;font-size:14px;cursor:pointer;}
@@ -227,7 +267,7 @@
     </svg>
     <div>
       <h1>Portal pengajuan staff</h1>
-      <p>Ajukan izin, sakit, tukar shift, cuti, atau keterlambatan</p>
+      <p>Ajukan izin, sakit, tukar shift, cuti, keterlambatan, atau absensi eror</p>
     </div>
   </div>
 
@@ -265,6 +305,10 @@
         <div class="chip" data-jenis="telat">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
           Telat/pulang cepat
+        </div>
+        <div class="chip" data-jenis="absensieror">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+          Absensi eror
         </div>
       </div>
     </div>
@@ -357,6 +401,14 @@ const formConfigs = {
       { id: "jam", label: "Jam", type: "time", required: true },
       { id: "keterangan", label: "Alasan", type: "textarea", required: true }
     ]
+  },
+  absensieror: {
+    label: "Detail absensi eror",
+    fields: [
+      { id: "tanggalAbsensi", label: "Tanggal absensi", type: "date", required: true },
+      { id: "waktuAbsensi", label: "Waktu absensi", type: "radio", options: [["masuk","Absen masuk"],["pulang","Absen pulang"]], required: true },
+      { id: "keterangan", label: "Kendala tidak bisa absen", type: "textarea", required: true }
+    ]
   }
 };
 
@@ -421,6 +473,7 @@ function renderDynamicFields(jenis){
   document.getElementById("dynamicLabel").textContent = config.label;
   document.getElementById("emptyCard").style.display = "none";
   card.style.display = "block";
+  card.dataset.jenis = jenis;
   container.innerHTML = "";
 
   if (config.columns){
@@ -437,7 +490,7 @@ function renderDynamicFields(jenis){
 
     container.appendChild(colGroup);
   } else {
-    // Layout satu kolom biasa — izin/sakit/cuti/telat
+    // Layout satu kolom biasa — izin/sakit/cuti/telat/absensieror
     config.fields.forEach(f => container.appendChild(buildFieldWrap(f)));
   }
 
